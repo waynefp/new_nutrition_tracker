@@ -142,7 +142,9 @@
 
                 <div class="scanner-shell">
                   <div class="video-frame">
-                    <video id="barcodeVideo" playsinline muted></video>
+                    <div id="barcodeScannerRegion" class="scanner-region">
+                      <div class="scanner-placeholder">Start the scanner to use your camera.</div>
+                    </div>
                   </div>
                   <div class="scanner-actions">
                     <button id="startScannerButton" class="primary" type="button">Start scan</button>
@@ -261,6 +263,7 @@
       </article>
     </template>
 
+    <script src="https://unpkg.com/html5-qrcode" defer></script>
     <script src="/app.js" type="module"></script>
   </body>
 </html>

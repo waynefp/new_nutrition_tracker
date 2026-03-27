@@ -38,8 +38,9 @@ const state = {
   results: [],
   photoDataUrl: "",
   scanner: {
-    stream: null,
-    intervalId: null
+    instance: null,
+    isRunning: false,
+    lastCode: ""
   }
 };
 
@@ -53,7 +54,7 @@ const elements = {
   barcodeImageInput: document.querySelector("#barcodeImageInput"),
   barcodeSupportText: document.querySelector("#barcodeSupportText"),
   barcodeInput: document.querySelector("#barcodeInput"),
-  barcodeVideo: document.querySelector("#barcodeVideo"),
+  barcodeScannerRegion: document.querySelector("#barcodeScannerRegion"),
   clearDayButton: document.querySelector("#clearDayButton"),
   errorHost: document.querySelector("#errorHost"),
   favoritesList: document.querySelector("#favoritesList"),
@@ -648,12 +649,13 @@ async function handleBarcodeImageSelection(file) {
     return;
   }
 
-  if (!supportsBarcodeDetector()) {
-    showError("Image-based barcode scanning is not available in this browser. Use live scan or enter the code manually.");
+  if (!hasScannerLibrary()) {
+    showError("The barcode scanner library is not available yet. Refresh the page and try again.");
     return;
   }
 
   try {
+    await stopBarcodeScanner();
     elements.resultsMeta.textContent = `Scanning barcode from ${file.name}...`;
     const code = await detectBarcodeFromFile(file);
     if (!code) {
@@ -806,52 +808,64 @@ function baseNutrients() {
 
 async function startBarcodeScanner() {
   clearError();
-  if (!supportsBarcodeDetector()) {
-    showError("Live barcode scanning is not available in this browser. Use barcode photo scan or typed input instead.");
+  if (!hasScannerLibrary()) {
+    showError("The barcode scanner library did not load. Refresh the page and try again.");
     return;
   }
 
   try {
+    if (state.scanner.isRunning) {
+      return;
+    }
+
+    const scanner = getScannerInstance();
+    const preferredCamera = await pickPreferredCamera();
     elements.barcodeSupportText.textContent = "Camera active. Point the barcode at the frame and hold steady.";
-    const detector = new BarcodeDetector({
-      formats: ["upc_a", "upc_e", "ean_13", "ean_8", "code_128"]
-    });
-    const stream = await navigator.mediaDevices.getUserMedia({
-      video: { facingMode: { ideal: "environment" } },
-      audio: false
-    });
+    await scanner.start(
+      preferredCamera?.id ? preferredCamera.id : { facingMode: "environment" },
+      {
+        fps: 10,
+        qrbox: { width: 280, height: 160 },
+        formatsToSupport: barcodeFormats(),
+        rememberLastUsedCamera: true
+      },
+      async (decodedText) => {
+        if (!decodedText || decodedText === state.scanner.lastCode) {
+          return;
+        }
 
-    state.scanner.stream = stream;
-    elements.barcodeVideo.srcObject = stream;
-    await elements.barcodeVideo.play();
+        state.scanner.lastCode = decodedText;
+        elements.barcodeInput.value = decodedText;
+        await stopBarcodeScanner();
+        await lookupBarcode(decodedText);
+      },
+      () => {}
+    );
 
-    state.scanner.intervalId = window.setInterval(async () => {
-      const detections = await detector.detect(elements.barcodeVideo);
-      const code = detections[0]?.rawValue;
-      if (code) {
-        stopBarcodeScanner();
-        elements.barcodeInput.value = code;
-        await lookupBarcode(code);
-      }
-    }, 650);
+    state.scanner.isRunning = true;
   } catch (error) {
     updateBarcodeSupportState();
     showError(error.message || "Unable to start barcode scanner.");
   }
 }
 
-function stopBarcodeScanner() {
-  if (state.scanner.intervalId) {
-    clearInterval(state.scanner.intervalId);
-    state.scanner.intervalId = null;
+async function stopBarcodeScanner() {
+  if (!state.scanner.instance || !state.scanner.isRunning) {
+    renderScannerIdleState();
+    updateBarcodeSupportState();
+    return;
   }
 
-  if (state.scanner.stream) {
-    state.scanner.stream.getTracks().forEach((track) => track.stop());
-    state.scanner.stream = null;
+  try {
+    await state.scanner.instance.stop();
+    await state.scanner.instance.clear();
+  } catch {
+    // The scanner can already be stopped if the tab was backgrounded.
   }
 
-  elements.barcodeVideo.srcObject = null;
+  state.scanner.isRunning = false;
+  state.scanner.lastCode = "";
+  renderScannerIdleState();
   updateBarcodeSupportState();
 }
 
@@ -1009,8 +1023,8 @@ function clamp(value, min, max) {
   return Math.min(Math.max(value, min), max);
 }
 
-function supportsBarcodeDetector() {
-  return "BarcodeDetector" in window;
+function hasScannerLibrary() {
+  return typeof window.Html5Qrcode === "function";
 }
 
 function updateBarcodeSupportState() {
@@ -1018,26 +1032,68 @@ function updateBarcodeSupportState() {
     return;
   }
 
-  if (supportsBarcodeDetector()) {
+  if (hasScannerLibrary()) {
     elements.barcodeSupportText.textContent =
-      "Live scan is available on this device. You can also scan a saved barcode image or enter the code manually.";
+      "Live scan is available here. You can also scan a saved barcode photo or enter the code manually.";
   } else {
     elements.barcodeSupportText.textContent =
-      "Live scan is not supported in this browser. You can still try scanning from a barcode photo or type the code manually.";
+      "The scanner library has not loaded yet. Refresh the page if live scanning does not appear.";
   }
 }
 
 async function detectBarcodeFromFile(file) {
-  const detector = new BarcodeDetector({
-    formats: ["upc_a", "upc_e", "ean_13", "ean_8", "code_128"]
-  });
-  const bitmap = await createImageBitmap(file);
-
+  const scanner = getScannerInstance();
   try {
-    const detections = await detector.detect(bitmap);
-    return detections[0]?.rawValue || "";
+    return await scanner.scanFile(file, true);
   } finally {
-    bitmap.close();
+    await scanner.clear();
+    renderScannerIdleState();
+    updateBarcodeSupportState();
+  }
+}
+
+function getScannerInstance() {
+  if (!state.scanner.instance) {
+    state.scanner.instance = new window.Html5Qrcode("barcodeScannerRegion", {
+      formatsToSupport: barcodeFormats()
+    });
+  }
+
+  return state.scanner.instance;
+}
+
+async function pickPreferredCamera() {
+  const cameras = await window.Html5Qrcode.getCameras();
+  const preferred = cameras.find((camera) =>
+    /back|rear|environment/i.test(camera.label || "")
+  );
+
+  return preferred || cameras[0] || null;
+}
+
+function barcodeFormats() {
+  const formats = window.Html5QrcodeSupportedFormats;
+  if (!formats) {
+    return [];
+  }
+
+  return [
+    formats.UPC_A,
+    formats.UPC_E,
+    formats.EAN_13,
+    formats.EAN_8,
+    formats.CODE_128
+  ].filter(Boolean);
+}
+
+function renderScannerIdleState() {
+  if (!elements.barcodeScannerRegion || state.scanner.isRunning) {
+    return;
+  }
+
+  if (!elements.barcodeScannerRegion.children.length) {
+    elements.barcodeScannerRegion.innerHTML =
+      '<div class="scanner-placeholder">Start the scanner to use your camera.</div>';
   }
 }
 
