@@ -50,6 +50,8 @@ const elements = {
   calorieTargetText: document.querySelector("#calorieTargetText"),
   calorieValue: document.querySelector("#calorieValue"),
   barcodeForm: document.querySelector("#barcodeForm"),
+  openBarcodeCameraButton: document.querySelector("#openBarcodeCameraButton"),
+  openBarcodeImageButton: document.querySelector("#openBarcodeImageButton"),
   barcodeCameraInput: document.querySelector("#barcodeCameraInput"),
   barcodeImageInput: document.querySelector("#barcodeImageInput"),
   barcodeSupportText: document.querySelector("#barcodeSupportText"),
@@ -69,6 +71,8 @@ const elements = {
   mealSegmented: document.querySelector("#mealSegmented"),
   mealCardTemplate: document.querySelector("#mealCardTemplate"),
   openAddButton: document.querySelector("#openAddButton"),
+  openPhotoCameraButton: document.querySelector("#openPhotoCameraButton"),
+  openPhotoLibraryButton: document.querySelector("#openPhotoLibraryButton"),
   photoForm: document.querySelector("#photoForm"),
   photoCameraInput: document.querySelector("#photoCameraInput"),
   photoLibraryInput: document.querySelector("#photoLibraryInput"),
@@ -165,6 +169,14 @@ function bindEvents() {
     await lookupBarcode(barcode);
   });
 
+  elements.openBarcodeImageButton.addEventListener("click", () => {
+    elements.barcodeImageInput.click();
+  });
+
+  elements.openBarcodeCameraButton.addEventListener("click", () => {
+    elements.barcodeCameraInput.click();
+  });
+
   elements.barcodeImageInput.addEventListener("change", async (event) => {
     await handleBarcodeImageSelection(event.target.files?.[0]);
     event.target.value = "";
@@ -173,6 +185,14 @@ function bindEvents() {
   elements.barcodeCameraInput.addEventListener("change", async (event) => {
     await handleBarcodeImageSelection(event.target.files?.[0]);
     event.target.value = "";
+  });
+
+  elements.openPhotoCameraButton.addEventListener("click", () => {
+    elements.photoCameraInput.click();
+  });
+
+  elements.openPhotoLibraryButton.addEventListener("click", () => {
+    elements.photoLibraryInput.click();
   });
 
   elements.photoCameraInput.addEventListener("change", async (event) => {
@@ -820,12 +840,13 @@ async function startBarcodeScanner() {
 
     const scanner = getScannerInstance();
     const preferredCamera = await pickPreferredCamera();
-    elements.barcodeSupportText.textContent = "Camera active. Point the barcode at the frame and hold steady.";
+    elements.barcodeSupportText.textContent =
+      "Camera active. Fill most of the frame with the barcode and move a little closer or farther away until it snaps in.";
     await scanner.start(
       preferredCamera?.id ? preferredCamera.id : { facingMode: "environment" },
       {
-        fps: 10,
-        qrbox: { width: 280, height: 160 },
+        fps: 8,
+        aspectRatio: 1.7777778,
         formatsToSupport: barcodeFormats(),
         rememberLastUsedCamera: true
       },

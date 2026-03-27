@@ -151,14 +151,10 @@
                     <button id="stopScannerButton" class="ghost" type="button">Stop</button>
                   </div>
                   <div class="capture-actions">
-                    <label class="ghost file-action">
-                      Scan from photo
-                      <input id="barcodeImageInput" type="file" accept="image/*" />
-                    </label>
-                    <label class="ghost file-action">
-                      Take barcode photo
-                      <input id="barcodeCameraInput" type="file" accept="image/*" capture="environment" />
-                    </label>
+                    <button id="openBarcodeImageButton" class="ghost file-action" type="button">Scan from photo</button>
+                    <button id="openBarcodeCameraButton" class="ghost file-action" type="button">Take barcode photo</button>
+                    <input id="barcodeImageInput" class="hidden-file-input" type="file" accept="image/*" />
+                    <input id="barcodeCameraInput" class="hidden-file-input" type="file" accept="image/*" capture="environment" />
                   </div>
                   <p id="barcodeSupportText" class="microcopy">
                     Native live scanning is used when the browser supports it. Manual entry and image scan remain available.
@@ -170,14 +166,10 @@
             <div class="finder-panel" data-panel="photo">
               <form id="photoForm" class="stack-form">
                 <div class="capture-actions">
-                  <label class="primary file-action">
-                    Take photo
-                    <input id="photoCameraInput" type="file" accept="image/*" capture="environment" />
-                  </label>
-                  <label class="ghost file-action">
-                    Choose from library
-                    <input id="photoLibraryInput" type="file" accept="image/*" />
-                  </label>
+                  <button id="openPhotoCameraButton" class="primary file-action" type="button">Take photo</button>
+                  <button id="openPhotoLibraryButton" class="ghost file-action" type="button">Choose from library</button>
+                  <input id="photoCameraInput" class="hidden-file-input" type="file" accept="image/*" capture="environment" />
+                  <input id="photoLibraryInput" class="hidden-file-input" type="file" accept="image/*" />
                 </div>
                 <div id="photoPreview" class="photo-preview">No photo selected</div>
                 <button class="primary" type="submit">Analyze photo</button>

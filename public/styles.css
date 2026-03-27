@@ -468,21 +468,16 @@ p {
 }
 
 .file-action {
-  position: relative;
   display: inline-flex;
   align-items: center;
   justify-content: center;
   min-height: 48px;
   min-width: 0;
-  overflow: hidden;
   text-align: center;
 }
 
-.file-action input {
-  position: absolute;
-  inset: 0;
-  opacity: 0;
-  cursor: pointer;
+.hidden-file-input {
+  display: none;
 }
 
 .scanner-shell {
