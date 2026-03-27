@@ -1,0 +1,8 @@
+.env
+.env.local
+.env.*.local
+node_modules/
+.vercel/
+server-test.log
+server-test.err
+npm-debug.log*

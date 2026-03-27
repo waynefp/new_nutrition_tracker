@@ -1,0 +1,250 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Nutrition Tracker</title>
+    <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
+    <link rel="stylesheet" href="/styles.css" />
+  </head>
+  <body>
+    <div class="app-shell">
+      <header class="topbar">
+        <div>
+          <p class="eyebrow">Nutrition Tracker</p>
+          <h1>Daily dashboard</h1>
+        </div>
+        <div class="topbar-actions">
+          <button id="openAddButton" class="primary" type="button">Log food</button>
+          <div class="status-pill">
+            <span class="status-dot" id="statusDot"></span>
+            <span id="statusText">Checking API</span>
+          </div>
+        </div>
+      </header>
+
+      <main class="workspace-shell">
+        <section class="view active" data-view="dashboard">
+          <section class="hero-band">
+            <div class="hero-copy">
+              <p class="eyebrow">Overview</p>
+              <h2 id="heroHeadline">On track for today.</h2>
+              <p id="heroSubcopy">
+                Keep meals balanced, capture packaged foods quickly, and watch your totals update in
+                real time.
+              </p>
+            </div>
+            <div class="hero-actions">
+              <button id="quickSearchButton" class="primary" type="button">Search food</button>
+              <button id="quickScanButton" class="ghost" type="button">Scan barcode</button>
+            </div>
+          </section>
+
+          <section class="surface">
+            <div class="surface-heading">
+              <div>
+                <p class="section-label">Day view</p>
+                <h3 id="selectedDateLabel">Today</h3>
+              </div>
+              <div class="date-nav">
+                <button id="prevDayButton" class="ghost" type="button">Previous</button>
+                <button id="todayButton" class="ghost" type="button">Today</button>
+                <button id="nextDayButton" class="ghost" type="button">Next</button>
+              </div>
+            </div>
+
+            <div class="overview-grid">
+              <article class="focus-panel">
+                <p class="section-label">Calories</p>
+                <div class="focus-value-row">
+                  <span class="focus-value" id="calorieValue">0</span>
+                  <span class="focus-unit">kcal</span>
+                </div>
+                <p id="calorieTargetText" class="focus-copy">0 remaining of 2200</p>
+                <div class="ring-track">
+                  <div id="calorieRing" class="ring-fill"></div>
+                </div>
+              </article>
+
+              <div class="macro-progress-list" id="macroProgressList"></div>
+            </div>
+          </section>
+
+          <section class="surface">
+            <div class="surface-heading">
+              <div>
+                <p class="section-label">Meals</p>
+                <h3>Daily breakdown</h3>
+              </div>
+              <button id="clearDayButton" class="ghost" type="button">Clear day</button>
+            </div>
+            <div class="meal-grid" id="mealGrid"></div>
+          </section>
+
+          <section class="surface dual-surface">
+            <div>
+              <div class="surface-heading compact">
+                <div>
+                  <p class="section-label">Recent</p>
+                  <h3>Latest entries</h3>
+                </div>
+              </div>
+              <div id="recentEntries" class="stack-list empty-state">No foods logged yet.</div>
+            </div>
+
+            <div>
+              <div class="surface-heading compact">
+                <div>
+                  <p class="section-label">Quick add</p>
+                  <h3>Frequent foods</h3>
+                </div>
+              </div>
+              <div id="favoritesList" class="quick-food-list empty-state">Log a few foods to build shortcuts.</div>
+            </div>
+          </section>
+        </section>
+
+        <section class="view" data-view="add">
+          <section class="surface add-surface">
+            <div class="surface-heading">
+              <div>
+                <p class="section-label">Capture</p>
+                <h3>Add to <span id="selectedMealLabel">Breakfast</span></h3>
+              </div>
+              <div class="meal-segmented" id="mealSegmented"></div>
+            </div>
+
+            <div class="finder-tabs">
+              <button class="finder-tab active" data-tab="search" type="button">Search</button>
+              <button class="finder-tab" data-tab="barcode" type="button">Barcode</button>
+              <button class="finder-tab" data-tab="photo" type="button">Photo</button>
+            </div>
+
+            <div class="finder-panel active" data-panel="search">
+              <form id="searchForm" class="stack-form">
+                <label>
+                  Search for a food
+                  <input id="searchInput" name="query" placeholder="oatmeal, yogurt, salmon..." />
+                </label>
+                <button class="primary" type="submit">Search Edamam</button>
+              </form>
+            </div>
+
+            <div class="finder-panel" data-panel="barcode">
+              <div class="stack-form">
+                <form id="barcodeForm" class="stack-form">
+                  <label>
+                    Enter UPC / EAN / PLU
+                    <input id="barcodeInput" name="barcode" placeholder="049000042511" />
+                  </label>
+                  <button class="primary" type="submit">Lookup barcode</button>
+                </form>
+
+                <div class="scanner-shell">
+                  <div class="video-frame">
+                    <video id="barcodeVideo" playsinline muted></video>
+                  </div>
+                  <div class="scanner-actions">
+                    <button id="startScannerButton" class="primary" type="button">Start scan</button>
+                    <button id="stopScannerButton" class="ghost" type="button">Stop</button>
+                  </div>
+                  <p class="microcopy">
+                    Native barcode scanning is used when the browser supports it. Typed lookup still works on any device.
+                  </p>
+                </div>
+              </div>
+            </div>
+
+            <div class="finder-panel" data-panel="photo">
+              <form id="photoForm" class="stack-form">
+                <label>
+                  Take or upload a food photo
+                  <input id="photoInput" type="file" accept="image/*" capture="environment" />
+                </label>
+                <div id="photoPreview" class="photo-preview">No photo selected</div>
+                <button class="primary" type="submit">Analyze photo</button>
+              </form>
+            </div>
+
+            <div id="errorHost"></div>
+
+            <div class="surface-heading compact">
+              <div>
+                <p class="section-label">Results</p>
+                <h3>Food matches</h3>
+              </div>
+              <p id="resultsMeta" class="microcopy">Search, scan, or upload a photo to see matches.</p>
+            </div>
+            <div id="results" class="results-list empty-state">No items yet.</div>
+          </section>
+        </section>
+
+        <section class="view" data-view="history">
+          <section class="surface">
+            <div class="surface-heading">
+              <div>
+                <p class="section-label">History</p>
+                <h3>Last 7 days</h3>
+              </div>
+            </div>
+            <div class="history-stats" id="historyStats"></div>
+            <div id="historyList" class="history-list empty-state">No history yet.</div>
+          </section>
+        </section>
+      </main>
+
+      <nav class="bottom-nav">
+        <button class="nav-item active" data-view-target="dashboard" type="button">
+          <span class="nav-label">Dashboard</span>
+        </button>
+        <button class="nav-item" data-view-target="add" type="button">
+          <span class="nav-label">Add</span>
+        </button>
+        <button class="nav-item" data-view-target="history" type="button">
+          <span class="nav-label">History</span>
+        </button>
+      </nav>
+    </div>
+
+    <template id="resultCardTemplate">
+      <article class="result-item">
+        <div class="result-media"></div>
+        <div class="result-content">
+          <div>
+            <h4 class="result-title"></h4>
+            <p class="result-subtitle"></p>
+          </div>
+          <div class="result-macros"></div>
+          <form class="result-form">
+            <label>
+              Measure
+              <select name="measure"></select>
+            </label>
+            <label>
+              Qty
+              <input name="quantity" type="number" min="0.1" step="0.1" value="1" />
+            </label>
+            <button class="primary" type="submit">Add</button>
+          </form>
+        </div>
+      </article>
+    </template>
+
+    <template id="mealCardTemplate">
+      <article class="meal-panel">
+        <div class="meal-panel-header">
+          <div>
+            <p class="section-label meal-kicker"></p>
+            <h4 class="meal-title"></h4>
+          </div>
+          <button class="ghost meal-log-button" type="button">Log</button>
+        </div>
+        <div class="meal-calories"></div>
+        <div class="meal-macros"></div>
+        <div class="meal-items-preview"></div>
+      </article>
+    </template>
+
+    <script src="/app.js" type="module"></script>
+  </body>
+</html>

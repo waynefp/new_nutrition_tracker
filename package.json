@@ -1,0 +1,10 @@
+{
+  "name": "nutrition-tracker-poc",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Edamam-powered nutrition tracker proof of concept",
+  "type": "module",
+  "scripts": {
+    "start": "node server.js"
+  }
+}
