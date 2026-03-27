@@ -49,6 +49,9 @@ const elements = {
   calorieTargetText: document.querySelector("#calorieTargetText"),
   calorieValue: document.querySelector("#calorieValue"),
   barcodeForm: document.querySelector("#barcodeForm"),
+  barcodeCameraInput: document.querySelector("#barcodeCameraInput"),
+  barcodeImageInput: document.querySelector("#barcodeImageInput"),
+  barcodeSupportText: document.querySelector("#barcodeSupportText"),
   barcodeInput: document.querySelector("#barcodeInput"),
   barcodeVideo: document.querySelector("#barcodeVideo"),
   clearDayButton: document.querySelector("#clearDayButton"),
@@ -66,7 +69,8 @@ const elements = {
   mealCardTemplate: document.querySelector("#mealCardTemplate"),
   openAddButton: document.querySelector("#openAddButton"),
   photoForm: document.querySelector("#photoForm"),
-  photoInput: document.querySelector("#photoInput"),
+  photoCameraInput: document.querySelector("#photoCameraInput"),
+  photoLibraryInput: document.querySelector("#photoLibraryInput"),
   photoPreview: document.querySelector("#photoPreview"),
   prevDayButton: document.querySelector("#prevDayButton"),
   nextDayButton: document.querySelector("#nextDayButton"),
@@ -94,6 +98,7 @@ async function boot() {
   ensureDay(state.selectedDate);
   buildMealSegmentedControl();
   bindEvents();
+  updateBarcodeSupportState();
   renderApp();
   await loadHealth();
 }
@@ -159,14 +164,24 @@ function bindEvents() {
     await lookupBarcode(barcode);
   });
 
-  elements.photoInput.addEventListener("change", async (event) => {
-    const file = event.target.files?.[0];
-    if (!file) {
-      return;
-    }
+  elements.barcodeImageInput.addEventListener("change", async (event) => {
+    await handleBarcodeImageSelection(event.target.files?.[0]);
+    event.target.value = "";
+  });
 
-    state.photoDataUrl = await fileToDataUrl(file);
-    elements.photoPreview.innerHTML = `<img src="${state.photoDataUrl}" alt="Selected food preview" />`;
+  elements.barcodeCameraInput.addEventListener("change", async (event) => {
+    await handleBarcodeImageSelection(event.target.files?.[0]);
+    event.target.value = "";
+  });
+
+  elements.photoCameraInput.addEventListener("change", async (event) => {
+    await handleFoodPhotoSelection(event.target.files?.[0]);
+    event.target.value = "";
+  });
+
+  elements.photoLibraryInput.addEventListener("change", async (event) => {
+    await handleFoodPhotoSelection(event.target.files?.[0]);
+    event.target.value = "";
   });
 
   elements.photoForm.addEventListener("submit", async (event) => {
@@ -591,6 +606,9 @@ function switchView(viewName) {
 
 function switchFinderTab(tabName) {
   state.activeFinderTab = tabName;
+  if (tabName !== "barcode") {
+    stopBarcodeScanner();
+  }
   elements.finderTabs.forEach((button) => {
     button.classList.toggle("active", button.dataset.tab === tabName);
   });
@@ -612,6 +630,43 @@ async function lookupBarcode(barcode) {
     label: `Looking up barcode ${barcode}...`,
     handler: () => apiGet(`/api/barcode?upc=${encodeURIComponent(barcode)}`)
   });
+}
+
+async function handleFoodPhotoSelection(file) {
+  if (!file) {
+    return;
+  }
+
+  state.photoDataUrl = await fileToDataUrl(file);
+  elements.photoPreview.innerHTML = `<img src="${state.photoDataUrl}" alt="Selected food preview" />`;
+}
+
+async function handleBarcodeImageSelection(file) {
+  clearError();
+
+  if (!file) {
+    return;
+  }
+
+  if (!supportsBarcodeDetector()) {
+    showError("Image-based barcode scanning is not available in this browser. Use live scan or enter the code manually.");
+    return;
+  }
+
+  try {
+    elements.resultsMeta.textContent = `Scanning barcode from ${file.name}...`;
+    const code = await detectBarcodeFromFile(file);
+    if (!code) {
+      showError("No barcode was detected in that image. Try a sharper photo or use manual entry.");
+      elements.resultsMeta.textContent = "No barcode found in the selected image.";
+      return;
+    }
+
+    elements.barcodeInput.value = code;
+    await lookupBarcode(code);
+  } catch (error) {
+    showError(error.message || "Unable to scan a barcode from that image.");
+  }
 }
 
 async function runLookup({ label, handler }) {
@@ -751,12 +806,13 @@ function baseNutrients() {
 
 async function startBarcodeScanner() {
   clearError();
-  if (!("BarcodeDetector" in window)) {
-    showError("This browser does not support BarcodeDetector. Use typed barcode input instead.");
+  if (!supportsBarcodeDetector()) {
+    showError("Live barcode scanning is not available in this browser. Use barcode photo scan or typed input instead.");
     return;
   }
 
   try {
+    elements.barcodeSupportText.textContent = "Camera active. Point the barcode at the frame and hold steady.";
     const detector = new BarcodeDetector({
       formats: ["upc_a", "upc_e", "ean_13", "ean_8", "code_128"]
     });
@@ -779,6 +835,7 @@ async function startBarcodeScanner() {
       }
     }, 650);
   } catch (error) {
+    updateBarcodeSupportState();
     showError(error.message || "Unable to start barcode scanner.");
   }
 }
@@ -795,6 +852,7 @@ function stopBarcodeScanner() {
   }
 
   elements.barcodeVideo.srcObject = null;
+  updateBarcodeSupportState();
 }
 
 function showError(message) {
@@ -949,6 +1007,38 @@ function round1(value) {
 
 function clamp(value, min, max) {
   return Math.min(Math.max(value, min), max);
+}
+
+function supportsBarcodeDetector() {
+  return "BarcodeDetector" in window;
+}
+
+function updateBarcodeSupportState() {
+  if (!elements.barcodeSupportText) {
+    return;
+  }
+
+  if (supportsBarcodeDetector()) {
+    elements.barcodeSupportText.textContent =
+      "Live scan is available on this device. You can also scan a saved barcode image or enter the code manually.";
+  } else {
+    elements.barcodeSupportText.textContent =
+      "Live scan is not supported in this browser. You can still try scanning from a barcode photo or type the code manually.";
+  }
+}
+
+async function detectBarcodeFromFile(file) {
+  const detector = new BarcodeDetector({
+    formats: ["upc_a", "upc_e", "ean_13", "ean_8", "code_128"]
+  });
+  const bitmap = await createImageBitmap(file);
+
+  try {
+    const detections = await detector.detect(bitmap);
+    return detections[0]?.rawValue || "";
+  } finally {
+    bitmap.close();
+  }
 }
 
 function fileToDataUrl(file) {

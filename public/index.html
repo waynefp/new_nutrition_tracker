@@ -148,8 +148,18 @@
                     <button id="startScannerButton" class="primary" type="button">Start scan</button>
                     <button id="stopScannerButton" class="ghost" type="button">Stop</button>
                   </div>
-                  <p class="microcopy">
-                    Native barcode scanning is used when the browser supports it. Typed lookup still works on any device.
+                  <div class="capture-actions">
+                    <label class="ghost file-action">
+                      Scan from photo
+                      <input id="barcodeImageInput" type="file" accept="image/*" />
+                    </label>
+                    <label class="ghost file-action">
+                      Take barcode photo
+                      <input id="barcodeCameraInput" type="file" accept="image/*" capture="environment" />
+                    </label>
+                  </div>
+                  <p id="barcodeSupportText" class="microcopy">
+                    Native live scanning is used when the browser supports it. Manual entry and image scan remain available.
                   </p>
                 </div>
               </div>
@@ -157,10 +167,16 @@
 
             <div class="finder-panel" data-panel="photo">
               <form id="photoForm" class="stack-form">
-                <label>
-                  Take or upload a food photo
-                  <input id="photoInput" type="file" accept="image/*" capture="environment" />
-                </label>
+                <div class="capture-actions">
+                  <label class="primary file-action">
+                    Take photo
+                    <input id="photoCameraInput" type="file" accept="image/*" capture="environment" />
+                  </label>
+                  <label class="ghost file-action">
+                    Choose from library
+                    <input id="photoLibraryInput" type="file" accept="image/*" />
+                  </label>
+                </div>
                 <div id="photoPreview" class="photo-preview">No photo selected</div>
                 <button class="primary" type="submit">Analyze photo</button>
               </form>
