@@ -135,7 +135,14 @@
                 <form id="barcodeForm" class="stack-form">
                   <label>
                     Enter UPC / EAN / PLU
-                    <input id="barcodeInput" name="barcode" placeholder="049000042511" />
+                    <input
+                      id="barcodeInput"
+                      name="barcode"
+                      placeholder="049000042511"
+                      inputmode="numeric"
+                      pattern="[0-9]*"
+                      autocomplete="off"
+                    />
                   </label>
                   <button class="primary" type="submit">Lookup barcode</button>
                 </form>
@@ -151,10 +158,14 @@
                     <button id="stopScannerButton" class="ghost" type="button">Stop</button>
                   </div>
                   <div class="capture-actions">
-                    <button id="openBarcodeImageButton" class="ghost file-action" type="button">Scan from photo</button>
-                    <button id="openBarcodeCameraButton" class="ghost file-action" type="button">Take barcode photo</button>
-                    <input id="barcodeImageInput" class="hidden-file-input" type="file" accept="image/*" />
-                    <input id="barcodeCameraInput" class="hidden-file-input" type="file" accept="image/*" capture="environment" />
+                    <label class="ghost file-action" role="button" tabindex="0">
+                      Scan from photo
+                      <input id="barcodeImageInput" class="hidden-file-input" type="file" accept="image/*" />
+                    </label>
+                    <label class="ghost file-action" role="button" tabindex="0">
+                      Take barcode photo
+                      <input id="barcodeCameraInput" class="hidden-file-input" type="file" accept="image/*" capture="environment" />
+                    </label>
                   </div>
                   <p id="barcodeSupportText" class="microcopy">
                     Native live scanning is used when the browser supports it. Manual entry and image scan remain available.
@@ -166,10 +177,14 @@
             <div class="finder-panel" data-panel="photo">
               <form id="photoForm" class="stack-form">
                 <div class="capture-actions">
-                  <button id="openPhotoCameraButton" class="primary file-action" type="button">Take photo</button>
-                  <button id="openPhotoLibraryButton" class="ghost file-action" type="button">Choose from library</button>
-                  <input id="photoCameraInput" class="hidden-file-input" type="file" accept="image/*" capture="environment" />
-                  <input id="photoLibraryInput" class="hidden-file-input" type="file" accept="image/*" />
+                  <label class="primary file-action" role="button" tabindex="0">
+                    Take photo
+                    <input id="photoCameraInput" class="hidden-file-input" type="file" accept="image/*" capture="environment" />
+                  </label>
+                  <label class="ghost file-action" role="button" tabindex="0">
+                    Choose from library
+                    <input id="photoLibraryInput" class="hidden-file-input" type="file" accept="image/*" />
+                  </label>
                 </div>
                 <div id="photoPreview" class="photo-preview">No photo selected</div>
                 <button class="primary" type="submit">Analyze photo</button>
@@ -255,7 +270,7 @@
       </article>
     </template>
 
-    <script src="https://unpkg.com/html5-qrcode" defer></script>
+    <script src="https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js" defer></script>
     <script src="/app.js" type="module"></script>
   </body>
 </html>

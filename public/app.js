@@ -28,6 +28,13 @@ const NUTRIENTS = {
 
 const DASHBOARD_PROGRESS = ["PROCNT", "CHOCDF", "FAT", "FIBTG"];
 const RESULT_MACROS = ["ENERC_KCAL", "PROCNT", "CHOCDF", "FAT"];
+const PHOTO_UPLOAD_TARGET_MAX_BYTES = 3_500_000;
+const PHOTO_UPLOAD_ATTEMPTS = [
+  { maxDimension: 1600, quality: 0.82 },
+  { maxDimension: 1280, quality: 0.74 },
+  { maxDimension: 1024, quality: 0.66 }
+];
+const BARCODE_IMAGE_PREP = { maxDimension: 2200, quality: 0.9 };
 
 const state = {
   app: loadAppState(),
@@ -40,7 +47,8 @@ const state = {
   scanner: {
     instance: null,
     isRunning: false,
-    lastCode: ""
+    lastCode: "",
+    stopPromise: null
   }
 };
 
@@ -50,8 +58,6 @@ const elements = {
   calorieTargetText: document.querySelector("#calorieTargetText"),
   calorieValue: document.querySelector("#calorieValue"),
   barcodeForm: document.querySelector("#barcodeForm"),
-  openBarcodeCameraButton: document.querySelector("#openBarcodeCameraButton"),
-  openBarcodeImageButton: document.querySelector("#openBarcodeImageButton"),
   barcodeCameraInput: document.querySelector("#barcodeCameraInput"),
   barcodeImageInput: document.querySelector("#barcodeImageInput"),
   barcodeSupportText: document.querySelector("#barcodeSupportText"),
@@ -71,8 +77,6 @@ const elements = {
   mealSegmented: document.querySelector("#mealSegmented"),
   mealCardTemplate: document.querySelector("#mealCardTemplate"),
   openAddButton: document.querySelector("#openAddButton"),
-  openPhotoCameraButton: document.querySelector("#openPhotoCameraButton"),
-  openPhotoLibraryButton: document.querySelector("#openPhotoLibraryButton"),
   photoForm: document.querySelector("#photoForm"),
   photoCameraInput: document.querySelector("#photoCameraInput"),
   photoLibraryInput: document.querySelector("#photoLibraryInput"),
@@ -114,23 +118,25 @@ function bindEvents() {
   });
 
   elements.finderTabs.forEach((button) => {
-    button.addEventListener("click", () => switchFinderTab(button.dataset.tab));
+    button.addEventListener("click", () => {
+      void switchFinderTab(button.dataset.tab);
+    });
   });
 
   elements.openAddButton.addEventListener("click", () => {
     switchView("add");
-    switchFinderTab("search");
+    void switchFinderTab("search");
   });
 
   elements.quickSearchButton.addEventListener("click", () => {
     switchView("add");
-    switchFinderTab("search");
+    void switchFinderTab("search");
     elements.searchInput.focus();
   });
 
   elements.quickScanButton.addEventListener("click", () => {
     switchView("add");
-    switchFinderTab("barcode");
+    void switchFinderTab("barcode");
   });
 
   elements.prevDayButton.addEventListener("click", () => changeDay(-1));
@@ -169,40 +175,36 @@ function bindEvents() {
     await lookupBarcode(barcode);
   });
 
-  elements.openBarcodeImageButton.addEventListener("click", () => {
-    elements.barcodeImageInput.click();
-  });
-
-  elements.openBarcodeCameraButton.addEventListener("click", () => {
-    elements.barcodeCameraInput.click();
-  });
-
   elements.barcodeImageInput.addEventListener("change", async (event) => {
-    await handleBarcodeImageSelection(event.target.files?.[0]);
-    event.target.value = "";
+    try {
+      await handleBarcodeImageSelection(event.target.files?.[0]);
+    } finally {
+      event.target.value = "";
+    }
   });
 
   elements.barcodeCameraInput.addEventListener("change", async (event) => {
-    await handleBarcodeImageSelection(event.target.files?.[0]);
-    event.target.value = "";
-  });
-
-  elements.openPhotoCameraButton.addEventListener("click", () => {
-    elements.photoCameraInput.click();
-  });
-
-  elements.openPhotoLibraryButton.addEventListener("click", () => {
-    elements.photoLibraryInput.click();
+    try {
+      await handleBarcodeImageSelection(event.target.files?.[0]);
+    } finally {
+      event.target.value = "";
+    }
   });
 
   elements.photoCameraInput.addEventListener("change", async (event) => {
-    await handleFoodPhotoSelection(event.target.files?.[0]);
-    event.target.value = "";
+    try {
+      await handleFoodPhotoSelection(event.target.files?.[0]);
+    } finally {
+      event.target.value = "";
+    }
   });
 
   elements.photoLibraryInput.addEventListener("change", async (event) => {
-    await handleFoodPhotoSelection(event.target.files?.[0]);
-    event.target.value = "";
+    try {
+      await handleFoodPhotoSelection(event.target.files?.[0]);
+    } finally {
+      event.target.value = "";
+    }
   });
 
   elements.photoForm.addEventListener("submit", async (event) => {
@@ -378,7 +380,7 @@ function renderMeals() {
       state.selectedMeal = meal.key;
       renderMealSelection();
       switchView("add");
-      switchFinderTab("search");
+      void switchFinderTab("search");
     });
 
     elements.mealGrid.appendChild(card);
@@ -625,17 +627,18 @@ function switchView(viewName) {
   renderViewState();
 }
 
-function switchFinderTab(tabName) {
+async function switchFinderTab(tabName) {
   state.activeFinderTab = tabName;
-  if (tabName !== "barcode") {
-    stopBarcodeScanner();
-  }
   elements.finderTabs.forEach((button) => {
     button.classList.toggle("active", button.dataset.tab === tabName);
   });
   elements.finderPanels.forEach((panel) => {
     panel.classList.toggle("active", panel.dataset.panel === tabName);
   });
+
+  if (tabName !== "barcode") {
+    await stopBarcodeScanner();
+  }
 }
 
 function changeDay(offset) {
@@ -654,12 +657,28 @@ async function lookupBarcode(barcode) {
 }
 
 async function handleFoodPhotoSelection(file) {
+  clearError();
+
   if (!file) {
     return;
   }
 
-  state.photoDataUrl = await fileToDataUrl(file);
-  elements.photoPreview.innerHTML = `<img src="${state.photoDataUrl}" alt="Selected food preview" />`;
+  if (!String(file.type || "").startsWith("image/")) {
+    state.photoDataUrl = "";
+    elements.photoPreview.textContent = "No photo selected";
+    showError("Please select an image file.");
+    return;
+  }
+
+  try {
+    state.photoDataUrl = await buildOptimizedPhotoDataUrl(file);
+    elements.photoPreview.innerHTML = `<img src="${state.photoDataUrl}" alt="Selected food preview" />`;
+    elements.resultsMeta.textContent = "Photo ready. Tap Analyze photo to continue.";
+  } catch (error) {
+    state.photoDataUrl = "";
+    elements.photoPreview.textContent = "No photo selected";
+    showError(error.message || "Unable to load that photo. Try another image.");
+  }
 }
 
 async function handleBarcodeImageSelection(file) {
@@ -677,7 +696,8 @@ async function handleBarcodeImageSelection(file) {
   try {
     await stopBarcodeScanner();
     elements.resultsMeta.textContent = `Scanning barcode from ${file.name}...`;
-    const code = await detectBarcodeFromFile(file);
+    const preparedFile = await buildScannerReadyImageFile(file);
+    const code = await detectBarcodeFromFile(preparedFile);
     if (!code) {
       showError("No barcode was detected in that image. Try a sharper photo or use manual entry.");
       elements.resultsMeta.textContent = "No barcode found in the selected image.";
@@ -834,6 +854,10 @@ async function startBarcodeScanner() {
   }
 
   try {
+    if (state.scanner.stopPromise) {
+      await state.scanner.stopPromise;
+    }
+
     if (state.scanner.isRunning) {
       return;
     }
@@ -871,23 +895,38 @@ async function startBarcodeScanner() {
 }
 
 async function stopBarcodeScanner() {
+  if (state.scanner.stopPromise) {
+    await state.scanner.stopPromise;
+    return;
+  }
+
   if (!state.scanner.instance || !state.scanner.isRunning) {
     renderScannerIdleState();
     updateBarcodeSupportState();
     return;
   }
 
-  try {
-    await state.scanner.instance.stop();
-    await state.scanner.instance.clear();
-  } catch {
-    // The scanner can already be stopped if the tab was backgrounded.
-  }
-
+  const scanner = state.scanner.instance;
   state.scanner.isRunning = false;
-  state.scanner.lastCode = "";
-  renderScannerIdleState();
-  updateBarcodeSupportState();
+
+  state.scanner.stopPromise = (async () => {
+    try {
+      await scanner.stop();
+      await scanner.clear();
+    } catch {
+      // The scanner can already be stopped if the tab was backgrounded.
+    } finally {
+      state.scanner.lastCode = "";
+      renderScannerIdleState();
+      updateBarcodeSupportState();
+    }
+  })();
+
+  try {
+    await state.scanner.stopPromise;
+  } finally {
+    state.scanner.stopPromise = null;
+  }
 }
 
 function showError(message) {
@@ -920,10 +959,27 @@ async function apiPost(url, body) {
 }
 
 async function handleResponse(response) {
-  const data = await response.json();
+  const contentType = response.headers.get("content-type") || "";
+  const expectsJson = contentType.includes("application/json");
+  const data = expectsJson ? await response.json().catch(() => null) : await response.text();
+
   if (!response.ok) {
-    throw new Error(data.error || "Request failed.");
+    const message =
+      typeof data === "string"
+        ? data.trim()
+        : data?.error || data?.message || `Request failed (${response.status}).`;
+
+    if (response.status === 413) {
+      throw new Error("The selected photo is too large. Try a closer crop or retake at lower resolution.");
+    }
+
+    throw new Error(message || `Request failed (${response.status}).`);
   }
+
+  if (!expectsJson || !data || typeof data !== "object") {
+    throw new Error("Unexpected server response. Please try again.");
+  }
+
   return data;
 }
 
@@ -1089,7 +1145,7 @@ async function pickPreferredCamera() {
     /back|rear|environment/i.test(camera.label || "")
   );
 
-  return preferred || cameras[0] || null;
+  return preferred || null;
 }
 
 function barcodeFormats() {
@@ -1118,12 +1174,97 @@ function renderScannerIdleState() {
   }
 }
 
-function fileToDataUrl(file) {
+async function buildOptimizedPhotoDataUrl(file) {
+  let candidate = "";
+
+  for (const attempt of PHOTO_UPLOAD_ATTEMPTS) {
+    candidate = await imageFileToJpegDataUrl(file, attempt);
+    if (estimateDataUrlBytes(candidate) <= PHOTO_UPLOAD_TARGET_MAX_BYTES) {
+      return candidate;
+    }
+  }
+
+  if (candidate) {
+    return candidate;
+  }
+
+  throw new Error("Unable to prepare that image for upload.");
+}
+
+async function buildScannerReadyImageFile(file) {
+  const jpegDataUrl = await imageFileToJpegDataUrl(file, BARCODE_IMAGE_PREP);
+  const blob = dataUrlToBlob(jpegDataUrl);
+  const safeName = toJpegFileName(file.name || "barcode-photo.jpg");
+  return new File([blob], safeName, { type: "image/jpeg" });
+}
+
+function estimateDataUrlBytes(dataUrl) {
+  const base64 = String(dataUrl).split(",")[1] || "";
+  return Math.floor((base64.length * 3) / 4);
+}
+
+function toJpegFileName(name) {
+  return String(name).replace(/\.[a-z0-9]+$/i, "") + ".jpg";
+}
+
+function dataUrlToBlob(dataUrl) {
+  const [header, base64 = ""] = String(dataUrl).split(",");
+  const mime = /data:([^;]+)/.exec(header)?.[1] || "image/jpeg";
+  const bytes = atob(base64);
+  const output = new Uint8Array(bytes.length);
+
+  for (let index = 0; index < bytes.length; index += 1) {
+    output[index] = bytes.charCodeAt(index);
+  }
+
+  return new Blob([output], { type: mime });
+}
+
+async function imageFileToJpegDataUrl(file, { maxDimension, quality }) {
+  const image = await loadImageFromFile(file);
+  const sourceWidth = image.naturalWidth || image.width;
+  const sourceHeight = image.naturalHeight || image.height;
+  const { width, height } = scaleToFit(sourceWidth, sourceHeight, maxDimension);
+  const canvas = document.createElement("canvas");
+  canvas.width = width;
+  canvas.height = height;
+
+  const context = canvas.getContext("2d");
+  if (!context) {
+    throw new Error("Image processing is not available in this browser.");
+  }
+
+  context.drawImage(image, 0, 0, width, height);
+  return canvas.toDataURL("image/jpeg", quality);
+}
+
+function scaleToFit(width, height, maxDimension) {
+  if (!width || !height || !maxDimension || Math.max(width, height) <= maxDimension) {
+    return { width: Math.max(width || 1, 1), height: Math.max(height || 1, 1) };
+  }
+
+  const ratio = maxDimension / Math.max(width, height);
+  return {
+    width: Math.max(1, Math.round(width * ratio)),
+    height: Math.max(1, Math.round(height * ratio))
+  };
+}
+
+function loadImageFromFile(file) {
   return new Promise((resolve, reject) => {
-    const reader = new FileReader();
-    reader.onload = () => resolve(String(reader.result));
-    reader.onerror = () => reject(new Error("Failed to read the selected image."));
-    reader.readAsDataURL(file);
+    const image = new Image();
+    const objectUrl = URL.createObjectURL(file);
+
+    image.onload = () => {
+      URL.revokeObjectURL(objectUrl);
+      resolve(image);
+    };
+    image.onerror = () => {
+      URL.revokeObjectURL(objectUrl);
+      reject(new Error("This image format could not be read. Try a JPG or PNG photo."));
+    };
+
+    image.src = objectUrl;
   });
 }
 
