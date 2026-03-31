@@ -688,16 +688,10 @@ async function handleBarcodeImageSelection(file) {
     return;
   }
 
-  if (!hasScannerLibrary()) {
-    showError("The barcode scanner library is not available yet. Refresh the page and try again.");
-    return;
-  }
-
   try {
     await stopBarcodeScanner();
     elements.resultsMeta.textContent = `Scanning barcode from ${file.name}...`;
-    const preparedFile = await buildScannerReadyImageFile(file);
-    const code = await detectBarcodeFromFile(preparedFile);
+    const code = await detectBarcodeFromFile(file);
     if (!code) {
       showError("No barcode was detected in that image. Try a sharper photo or use manual entry.");
       elements.resultsMeta.textContent = "No barcode found in the selected image.";
@@ -1119,9 +1113,31 @@ function updateBarcodeSupportState() {
 }
 
 async function detectBarcodeFromFile(file) {
+  if ("BarcodeDetector" in window) {
+    try {
+      const bitmap = await createImageBitmap(file);
+      const detector = new BarcodeDetector({
+        formats: ["ean_13", "ean_8", "upc_a", "upc_e", "code_128"]
+      });
+      const results = await detector.detect(bitmap);
+      bitmap.close();
+      if (results.length > 0) {
+        return results[0].rawValue;
+      }
+    } catch {
+      // Fall through to html5-qrcode
+    }
+  }
+
+  if (!hasScannerLibrary()) {
+    return null;
+  }
+
   const scanner = getScannerInstance();
   try {
     return await scanner.scanFile(file, true);
+  } catch {
+    return null;
   } finally {
     await scanner.clear();
     renderScannerIdleState();
