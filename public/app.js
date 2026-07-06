@@ -28,7 +28,9 @@ const NUTRIENTS = {
 
 const DASHBOARD_PROGRESS = ["PROCNT", "CHOCDF", "FAT", "FIBTG"];
 const RESULT_MACROS = ["ENERC_KCAL", "PROCNT", "CHOCDF", "FAT"];
-const PHOTO_UPLOAD_TARGET_MAX_BYTES = 3_500_000;
+// Vercel serverless functions reject request bodies over 4.5MB, and base64
+// inflates image size by ~33%, so we cap the *encoded* payload well under that.
+const PHOTO_UPLOAD_TARGET_MAX_BYTES = 3_900_000;
 const PHOTO_UPLOAD_ATTEMPTS = [
   { maxDimension: 1600, quality: 0.82 },
   { maxDimension: 1280, quality: 0.74 },
@@ -691,7 +693,15 @@ async function handleBarcodeImageSelection(file) {
   try {
     await stopBarcodeScanner();
     elements.resultsMeta.textContent = `Scanning barcode from ${file.name}...`;
-    const code = await detectBarcodeFromFile(file);
+
+    let scanReadyFile = file;
+    try {
+      scanReadyFile = await buildScannerReadyImageFile(file);
+    } catch {
+      // If conversion fails (unusual format), fall back to the original file.
+    }
+
+    const code = await detectBarcodeFromFile(scanReadyFile);
     if (!code) {
       showError("No barcode was detected in that image. Try a sharper photo or use manual entry.");
       elements.resultsMeta.textContent = "No barcode found in the selected image.";
@@ -1125,8 +1135,13 @@ async function detectBarcodeFromFile(file) {
         return results[0].rawValue;
       }
     } catch {
-      // Fall through to html5-qrcode
+      // Fall through to ZXing
     }
+  }
+
+  const zxingResult = await detectBarcodeWithZXing(file);
+  if (zxingResult) {
+    return zxingResult;
   }
 
   if (!hasScannerLibrary()) {
@@ -1142,6 +1157,36 @@ async function detectBarcodeFromFile(file) {
     await scanner.clear();
     renderScannerIdleState();
     updateBarcodeSupportState();
+  }
+}
+
+async function detectBarcodeWithZXing(file) {
+  if (typeof window.ZXing === "undefined") {
+    return null;
+  }
+
+  let objectUrl = "";
+  try {
+    const hints = new Map();
+    hints.set(window.ZXing.DecodeHintType.POSSIBLE_FORMATS, [
+      window.ZXing.BarcodeFormat.EAN_13,
+      window.ZXing.BarcodeFormat.EAN_8,
+      window.ZXing.BarcodeFormat.UPC_A,
+      window.ZXing.BarcodeFormat.UPC_E,
+      window.ZXing.BarcodeFormat.CODE_128
+    ]);
+    hints.set(window.ZXing.DecodeHintType.TRY_HARDER, true);
+
+    const reader = new window.ZXing.BrowserMultiFormatReader(hints);
+    objectUrl = URL.createObjectURL(file);
+    const result = await reader.decodeFromImageUrl(objectUrl);
+    return result?.getText() || null;
+  } catch {
+    return null;
+  } finally {
+    if (objectUrl) {
+      URL.revokeObjectURL(objectUrl);
+    }
   }
 }
 
@@ -1215,8 +1260,9 @@ async function buildScannerReadyImageFile(file) {
 }
 
 function estimateDataUrlBytes(dataUrl) {
-  const base64 = String(dataUrl).split(",")[1] || "";
-  return Math.floor((base64.length * 3) / 4);
+  // The data URL is sent as-is inside a JSON body, so the wire size is the
+  // string length itself (1 byte per base64 character), not the decoded size.
+  return String(dataUrl).length;
 }
 
 function toJpegFileName(name) {
