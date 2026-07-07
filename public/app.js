@@ -492,17 +492,6 @@ function renderResults() {
       media.innerHTML = `<div class="photo-preview">No image</div>`;
     }
 
-    RESULT_MACROS.forEach((key) => {
-      const nutrient = (item.nutrients || item.nutrientsPer100g || baseNutrients())[key];
-      const stat = document.createElement("div");
-      stat.className = "macro-stat";
-      stat.innerHTML = `
-        <span>${nutrient.label}</span>
-        <strong>${formatNumber(nutrient.quantity)} ${nutrient.unit}</strong>
-      `;
-      macroWrap.appendChild(stat);
-    });
-
     const measures = item.measures?.length
       ? item.measures
       : [{ label: item.measureLabel || "Serving", uri: "", weight: null }];
@@ -517,7 +506,14 @@ function renderResults() {
       measureSelect.appendChild(option);
     });
 
-    const selectedMeasure = item.defaultMeasure?.uri || item.measureLabel || measureSelect.value;
+    // Prefer a serving-style measure for the initial selection so the preview
+    // shows a realistic portion instead of a single gram.
+    const servingMeasure = measures.find((measure) => /serving/i.test(measure.label || ""));
+    const selectedMeasure =
+      servingMeasure?.uri ||
+      item.defaultMeasure?.uri ||
+      item.measureLabel ||
+      measureSelect.value;
     if (selectedMeasure) {
       measureSelect.value = selectedMeasure;
     }
@@ -525,6 +521,23 @@ function renderResults() {
     if (item.quantity) {
       quantityInput.value = item.quantity;
     }
+
+    // Live macro preview: recompute whenever the measure or quantity changes.
+    const updateMacroPreview = () => {
+      const measure = measures.find(
+        (candidate) => (candidate.uri || candidate.label) === measureSelect.value
+      );
+      const quantity = Number(quantityInput.value) || 1;
+      const scaled = scaleNutrientsForMeasure(item, measure, quantity);
+      renderMacroStats(
+        macroWrap,
+        scaled || item.nutrients || item.nutrientsPer100g || baseNutrients()
+      );
+    };
+
+    measureSelect.addEventListener("change", updateMacroPreview);
+    quantityInput.addEventListener("input", updateMacroPreview);
+    updateMacroPreview();
 
     form.addEventListener("submit", async (event) => {
       event.preventDefault();
@@ -557,6 +570,37 @@ function renderResults() {
 
     elements.results.appendChild(card);
   });
+}
+
+function renderMacroStats(macroWrap, nutrients) {
+  macroWrap.innerHTML = "";
+
+  RESULT_MACROS.forEach((key) => {
+    const nutrient = nutrients[key] || baseNutrients()[key];
+    const stat = document.createElement("div");
+    stat.className = "macro-stat";
+    stat.innerHTML = `
+      <span>${nutrient.label}</span>
+      <strong>${formatNumber(nutrient.quantity)} ${nutrient.unit}</strong>
+    `;
+    macroWrap.appendChild(stat);
+  });
+}
+
+function scaleNutrientsForMeasure(item, measure, quantity) {
+  const per100g = item.nutrientsPer100g;
+  if (!per100g || !measure?.weight || !quantity) {
+    return null;
+  }
+
+  const factor = (measure.weight * quantity) / 100;
+  const scaled = {};
+
+  for (const [key, nutrient] of Object.entries(per100g)) {
+    scaled[key] = { ...nutrient, quantity: round1(nutrient.quantity * factor) };
+  }
+
+  return scaled;
 }
 
 function renderHistory() {
